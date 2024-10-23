@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dinosaur Game</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+            font-family: Arial, sans-serif;
+        }
+        #gameCanvas {
+            border: 1px solid #000;
+        }
+        .game-overlay {
+            background-image: url("pngwing.com.png");
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 2;
+        }
+        .game-overlay img {
+            max-width: 100%;
+            height: auto;
+        }
+        #gameOverImage {
+            position: absolute;
+            display: none;
+        }
+        #gameOverText {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 48px;
+            font-weight: bold;
+            color: #ff0000;
+            text-shadow: 2px 2px 4px #000000;
+            display: none;
+        }
+        #collisionImage {
+            position: absolute;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="1000" height="300"></canvas>
+    <img id="gameOverImage" src="" alt="Game Over">
+    <div id="gameOverText">GAME OVER</div>
+    <img id="collisionImage" src="" alt="Collision">
+    <div id="startScreen" class="game-overlay">
+        <h2>Dinosaur Game</h2>
+        <p>Press Space or Up Arrow to jump</p>
+        <button id="startButton">Start Game</button>
+    </div>
+    <div id="gameOverScreen" class="game-overlay" style="display: none;">
+        <h2>Game Over</h2>
+        <p>Your score: <span id="finalScore"></span></p>
+        <button id="restartButton">Restart Game</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const startScreen = document.getElementById('startScreen');
+        const gameOverScreen = document.getElementById('gameOverScreen');
+        const gameOverImage = document.getElementById('gameOverImage');
+        const gameOverText = document.getElementById('gameOverText');
+        const collisionImage = document.getElementById('collisionImage');
+        const restartButton = document.getElementById('restartButton');
+
+        let gameOver = false;
+        let gameStarted = false;
+
+        // Load images
+        const mageImg = new Image();
+        mageImg.src = 'pngwing.com.png'; // Replace with your mage image path
+        const gameOverImg = new Image();
+        gameOverImg.src = 'pngwing.com (1).png'; // Replace with your game over image path
+
+        // Game variables
+        let mage = {
+            x: 50,
+            y: 220,
+            width: 40,
+            height: 74,
+            jumping: false,
+            jumpHeight: 200,
+            jumpCount: 0
+        };
+
+        let obstacles = [];
+        let coins = [];
+        let score = 0;
+        let gameSpeed = 5;
+        let gameLoop;
+
+        // Event listeners
+        document.addEventListener('keydown', handleKeyDown);
+        document.addEventListener('touchstart', handleTouch);
+        startScreen.addEventListener('click', startGame);
+        gameOverScreen.addEventListener('click', restartGame);
+        restartButton.addEventListener('click', restartGame);
+
+        function handleKeyDown(e) {
+            if ((e.code === 'Space' || e.code === 'ArrowUp') && gameStarted && !gameOver) {
+                jump();
+            } else if ((e.code === 'Space' || e.code === 'Enter') && !gameStarted) {
+                startGame();
+            } else if ((e.code === 'Space' || e.code === 'Enter') && gameOver) {
+                restartGame();
+            }
+        }
+
+        function handleTouch(e) {
+            if (gameStarted && !gameOver) {
+                jump();
+            } else if (!gameStarted) {
+                startGame();
+            } else if (gameOver) {
+                restartGame();
+            }
+        }
+
+        function jump() {
+            if (!mage.jumping) {
+                mage.jumping = true;
+                mage.jumpCount = 0;
+            }
+        }
+
+        function drawMage() {
+            ctx.drawImage(mageImg, mage.x, mage.y, mage.width, mage.height);
+        }
+
+        function drawObstacles() {
+            ctx.fillStyle = '#666';
+            obstacles.forEach(obstacle => {
+                if (!obstacle.collided) {
+                    ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+                }
+            });
+        }
+
+        function drawCoins() {
+            if (!gameStarted || gameOver) return;
+
+            ctx.fillStyle = '#FFD700';
+            ctx.strokeStyle = '#000';
+            coins.forEach(coin => {
+                ctx.beginPath();
+                ctx.arc(coin.x + coin.radius, coin.y + coin.radius, coin.radius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+            });
+        }
+
+        function drawScore() {
+            ctx.fillStyle = '#000';
+            ctx.font = '24px Arial';
+            ctx.fillText(`Score: ${score}`, 850, 40);
+        }
+
+        function updateMage() {
+            if (mage.jumping) {
+                mage.jumpCount++;
+                mage.y = 220 - Math.sin(mage.jumpCount * Math.PI / 35) * mage.jumpHeight;
+                if (mage.jumpCount > 35) {
+                    mage.jumping = false;
+                    mage.y = 220;
+                }
+            }
+        }
+
+        function updateObstacles() {
+            if (obstacles.length === 0 || obstacles[obstacles.length - 1].x < 600) {
+                obstacles.push({
+                    x: canvas.width,
+                    y: 230,
+                    width: 40,
+                    height: 70
+                });
+            }
+
+            obstacles.forEach(obstacle => {
+                obstacle.x -= gameSpeed;
+            });
+
+            obstacles = obstacles.filter(obstacle => obstacle.x > -40);
+        }
+
+        function updateCoins() {
+            if (!gameStarted || gameOver) return;
+
+            if (coins.length === 0 || coins[coins.length - 1].x < canvas.width - 200) {
+                let coinY = Math.random() < 0.5 ? 260 : 180;
+                coins.push({
+                    x: canvas.width,
+                    y: coinY,
+                    radius: 15
+                });
+            }
+
+            coins.forEach(coin => {
+                coin.x -= gameSpeed;
+            });
+
+            coins = coins.filter(coin => coin.x > -30);
+        }
+
+        function checkCollisions() {
+            obstacles.forEach(obstacle => {
+                if (
+                    mage.x < obstacle.x + obstacle.width &&
+                    mage.x + mage.width > obstacle.x &&
+                    mage.y < obstacle.y + obstacle.height &&
+                    mage.y + mage.height > obstacle.y &&
+                    !obstacle.collided
+                ) {
+                    obstacle.collided = true;
+                    endGame(obstacle);
+                }
+            });
+
+            coins = coins.filter(coin => {
+                if (
+                    mage.x < coin.x + coin.radius * 2 &&
+                    mage.x + mage.width > coin.x &&
+                    mage.y < coin.y + coin.radius * 2 &&
+                    mage.y + mage.height > coin.y
+                ) {
+                    score++;
+                    if (score % 10 === 0) {
+                        gameSpeed += 0.5;
+                    }
+                    return false;
+                }
+                return true;
+            });
+        }
+
+        function endGame(collidedObstacle) {
+            gameOver = true;
+            gameStarted = false;
+            clearInterval(gameLoop);
+            
+            // Position and show the collision image
+            collisionImage.style.left = `${collidedObstacle.x}px`;
+            collisionImage.style.top = `${collidedObstacle.y}px`;
+            collisionImage.style.width = `${collidedObstacle.width}px`;
+            collisionImage.style.height = `${collidedObstacle.height}px`;
+            collisionImage.style.display = 'block';
+            
+            // Show the "GAME OVER" text
+            gameOverText.style.display = 'block';
+            
+            // Wait for 2 seconds before showing the game over screen
+            setTimeout(() => {
+                const finalScoreSpan = document.getElementById('finalScore');
+                finalScoreSpan.textContent = score;
+                gameOverScreen.style.display = 'block';
+            }, 2000);
+        }
+
+        function startGame() {
+            gameStarted = true;
+            gameOver = false;
+            startScreen.style.display = 'none';
+            gameLoop = setInterval(update, 1000 / 60);  // 60 FPS
+        }
+
+        function restartGame() {
+            gameOver = false;
+            gameStarted = true;
+            gameOverScreen.style.display = 'none';
+            collisionImage.style.display = 'none';
+            gameOverText.style.display = 'none';
+            mage.y = 220;
+            mage.jumping = false;
+            obstacles = [];
+            coins = [];
+            score = 0;
+            gameSpeed = 5;
+            gameLoop = setInterval(update, 1000 / 60);  // 60 FPS
+        }
+
+        function update() {
+            if (!gameStarted || gameOver) return;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            updateMage();
+            updateObstacles();
+            updateCoins();
+            checkCollisions();
+
+            drawMage();
+            drawObstacles();
+            drawCoins();
+            drawScore();
+        }
+
+        // Initial setup
+        function init() {
+            drawMage(); // Draw initial mage
+            startScreen.style.display = 'block';
+            gameOverScreen.style.display = 'none';
+        }
+
+        // Wait for images to load before initializing the game
+        Promise.all([
+            new Promise(resolve => mageImg.onload = resolve),
+            new Promise(resolve => gameOverImg.onload = resolve)
+        ]).then(() => {
+            init();
+        });
+    </script>
+</body>
+</html>
